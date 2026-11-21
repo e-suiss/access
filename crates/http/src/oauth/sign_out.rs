@@ -20,16 +20,16 @@ pub(super) const WAIT_S: u8 = 5;
 
 static CATALOGS: LazyLock<Option<Catalogs>> = LazyLock::new(|| Catalogs::embedded().ok());
 
-const RTL: [&str; 4] = ["ar", "fa", "he", "ur"];
+pub(crate) const RTL: [&str; 4] = ["ar", "fa", "he", "ur"];
 
 const SCRIPT: &str = "(()=>{const go=()=>{const a=document.getElementById(\"continue\");if(a)location.replace(a.href);};let n=0;setTimeout(go,5000);document.addEventListener(\"load\",e=>{const m=document.querySelector(\"main\");if(!(e.target instanceof HTMLIFrameElement)||!m)return;n+=1;if(n>=Number(m.dataset.frames))go();},true);})();";
 
-const STYLE: &str = ":root{color-scheme:light dark;--bg:var(--brand-background,#ffffff);--fg:#111111;--muted:#555555;--accent:var(--brand-primary,#111111);--on-accent:#ffffff}@media (prefers-color-scheme:dark){:root{--bg:#111111;--fg:#f5f5f5;--muted:#a3a3a3;--accent:var(--brand-primary,#f5f5f5);--on-accent:#111111}}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,\"Segoe UI\",sans-serif}main{width:100%;max-width:400px;display:flex;flex-direction:column;gap:24px}h1{margin:0 0 8px;font-size:28px;line-height:1.15;font-weight:600}p{margin:0;color:var(--muted)}a{display:flex;align-items:center;justify-content:center;height:48px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-weight:600;text-decoration:none}a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}";
+pub(crate) const STYLE: &str = ":root{color-scheme:light dark;--bg:var(--brand-background,#ffffff);--fg:#111111;--muted:#555555;--accent:var(--brand-primary,#111111);--on-accent:#ffffff}@media (prefers-color-scheme:dark){:root{--bg:#111111;--fg:#f5f5f5;--muted:#a3a3a3;--accent:var(--brand-primary,#f5f5f5);--on-accent:#111111}}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,\"Segoe UI\",sans-serif}main{width:100%;max-width:400px;display:flex;flex-direction:column;gap:24px}h1{margin:0 0 8px;font-size:28px;line-height:1.15;font-weight:600}p{margin:0;color:var(--muted)}a{display:flex;align-items:center;justify-content:center;height:48px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-weight:600;text-decoration:none}a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}";
 
 /// The person's language: the first well-formed `ui_locales` tag, else the first
 /// `Accept-Language` tag, else English.
 #[must_use]
-pub(super) fn locale(ui_locales: Option<&str>, accept_language: Option<&str>) -> String {
+pub(crate) fn locale(ui_locales: Option<&str>, accept_language: Option<&str>) -> String {
     let asked = ui_locales.into_iter().flat_map(str::split_whitespace);
     let accepted = accept_language
         .into_iter()
@@ -42,7 +42,7 @@ pub(super) fn locale(ui_locales: Option<&str>, accept_language: Option<&str>) ->
         .map_or_else(|| String::from(DEFAULT_LANGUAGE), str::to_ascii_lowercase)
 }
 
-fn text(key: &str, locale: &str, overrides: &Overrides) -> String {
+pub(crate) fn text(key: &str, locale: &str, overrides: &Overrides) -> String {
     CATALOGS
         .as_ref()
         .and_then(|c| c.format(key, locale, Some(overrides), &[]))

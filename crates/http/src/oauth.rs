@@ -22,7 +22,7 @@ pub mod approval;
 mod ciba;
 mod device;
 mod register;
-mod sign_out;
+pub(crate) mod sign_out;
 
 /// The session cookie of the hosted login (TN-17).
 pub const SESSION_COOKIE: &str = "__Host-access-session";

@@ -30,6 +30,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Extension, Router};
 
+use super::post::{Look, post_page};
 use super::web::{Jar, environment};
 use super::{Peer, Shared};
 
@@ -261,7 +262,35 @@ fn flow_path(entry: &EnvironmentEntry, endpoint: &str, key: &str) -> String {
     format!("{}{endpoint}?flow={key}", entry.issuer.path())
 }
 
-fn render(entry: &EnvironmentEntry, endpoint: &str, key: &str, outcome: Outcome) -> Response {
+/// TN-175: the outcome as answered, a post page drawn in the environment's look and the person's
+/// language.
+async fn respond<D, K, KI, C, M, S>(
+    s: &Svc<D, K, KI, C, M, S>,
+    entry: &EnvironmentEntry,
+    jar: &Jar,
+    (endpoint, key): (&str, &str),
+    outcome: Outcome,
+) -> Response
+where
+    KI: Kits,
+    C: Clock + Sync,
+    M: Messages,
+{
+    let look = if matches!(outcome, Outcome::Post { .. }) {
+        Look::of(jar.page_headers(), s.login.hosted.page_look(entry).await)
+    } else {
+        Look::default()
+    };
+    render(entry, endpoint, key, outcome, &look)
+}
+
+fn render(
+    entry: &EnvironmentEntry,
+    endpoint: &str,
+    key: &str,
+    outcome: Outcome,
+    look: &Look,
+) -> Response {
     match outcome {
         Outcome::Post { action, fields } => {
             let n = nonce();
@@ -269,9 +298,9 @@ fn render(entry: &EnvironmentEntry, endpoint: &str, key: &str, outcome: Outcome)
                 .iter()
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
-            let page = binding::post_page(&action, &refs, &n);
+            let page = post_page(&action, &refs, &n, look);
             let csp = format!(
-                "default-src 'none'; script-src 'nonce-{n}'; form-action {}; frame-ancestors 'none'; base-uri 'none'",
+                "default-src 'none'; style-src 'nonce-{n}'; script-src 'nonce-{n}'; form-action {}; frame-ancestors 'none'; base-uri 'none'",
                 origin(&action)
             );
             html(StatusCode::OK, page, &csp)
@@ -367,7 +396,7 @@ where
         return error_page("saml-unavailable");
     };
     let outcome = s.front.run(entry, key, session, browser.correlation).await;
-    render(entry, endpoint, key, outcome)
+    respond(s, entry, jar, (endpoint, key), outcome).await
 }
 
 async fn open_and_run<D, K, KI, C, M, S>(
@@ -508,7 +537,7 @@ where
         Outcome::Error(_) | Outcome::Login => Outcome::SignedOut,
         other => other,
     };
-    let mut r = render(entry, "/saml/slo", "", outcome);
+    let mut r = respond(s, entry, jar, ("/saml/slo", ""), outcome).await;
     if let Ok(v) = HeaderValue::from_str(&clear) {
         r.headers_mut().append(header::SET_COOKIE, v);
     }
@@ -567,7 +596,7 @@ handler! {
                 let session = s.login.hosted.saml_session(&entry, &browser).await.ok().flatten();
                 match s.front.run(&entry, &key, session, browser.correlation).await {
                     Outcome::Login => hardened(StatusCode::UNAUTHORIZED.into_response(), "default-src 'none'"),
-                    other => render(&entry, "/saml/ecp", &key, other),
+                    other => respond(&s, &entry, &jar, ("/saml/ecp", &key), other).await,
                 }
             }
             Err(code) => error_page(&code),

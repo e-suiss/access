@@ -12,7 +12,7 @@ control = "V1 encoding and sanitization"
 status = "met"
 rules = ["SA-21"]
 tests = [
-  "crates/identity-saml/src/app/binding.rs::the_post_page_escapes_and_carries_the_nonce",
+  "crates/http/src/login/post.rs::the_post_page_speaks_the_persons_language_escapes_and_carries_the_nonce",
   "crates/identity-oauth/src/domain/jarm.rs::the_form_escapes_what_it_posts",
   "bins/access-parser-worker/src/c14n.rs::text_and_attributes_are_escaped",
 ]

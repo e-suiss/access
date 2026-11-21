@@ -283,7 +283,9 @@ where
             fields.push(("RelayState", r));
         }
         fields.push(("hop", "1"));
-        let page = access_identity_saml::binding::post_page(uri.path(), &fields, &n);
+        // TN-175
+        let look = super::post::Look::of(&headers, s.login.hosted.page_look(&entry).await);
+        let page = super::post::post_page(uri.path(), &fields, &n, &look);
         return hardened(
             (
                 StatusCode::OK,
@@ -292,7 +294,7 @@ where
             )
                 .into_response(),
             &format!(
-                "default-src 'none'; script-src 'nonce-{n}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+                "default-src 'none'; style-src 'nonce-{n}'; script-src 'nonce-{n}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
             ),
         );
     }

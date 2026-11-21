@@ -6,7 +6,6 @@
 use crate::alg::SigAlg;
 use crate::dsig::{SignError, XmlSigner};
 use crate::sp::b64;
-use crate::xml::html;
 
 /// Percent-encodes `s` for a query value (RFC 3986 unreserved characters kept).
 #[must_use]
@@ -106,27 +105,6 @@ pub fn csp_nonce() -> String {
         .unwrap_or_default()
 }
 
-/// An HTML page that posts `fields` to `action` at once; the script runs only under `nonce`.
-#[must_use]
-pub fn post_page(action: &str, fields: &[(&str, &str)], nonce: &str) -> String {
-    let mut inputs = String::new();
-    for (name, value) in fields {
-        let _ = std::fmt::Write::write_fmt(
-            &mut inputs,
-            format_args!(
-                "<input type=\"hidden\" name=\"{}\" value=\"{}\">",
-                html(name),
-                html(value)
-            ),
-        );
-    }
-    format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Signing in</title></head><body><form method=\"post\" action=\"{}\">{inputs}<noscript><button type=\"submit\">Continue</button></noscript></form><script nonce=\"{}\">document.forms[0].submit()</script></body></html>",
-        html(action),
-        html(nonce)
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,20 +121,5 @@ mod tests {
             b"SAMLResponse=x&SigAlg=y"
         );
         assert_eq!(encode("a b/+="), "a%20b%2F%2B%3D");
-    }
-
-    // §10.6.1
-    #[test]
-    fn the_post_page_escapes_and_carries_the_nonce() {
-        let nonce: String = (0..5_u8).map(|i| char::from(b'a' + i)).collect();
-        let p = post_page(
-            "https://sp.test/acs?a=1&b=\"",
-            &[("SAMLResponse", "PD94<>"), ("RelayState", "r\"")],
-            &nonce,
-        );
-        assert!(p.contains("action=\"https://sp.test/acs?a=1&amp;b=&quot;\""));
-        assert!(p.contains("value=\"PD94&lt;&gt;\""));
-        assert!(p.contains("value=\"r&quot;\""));
-        assert!(p.contains(&format!("<script nonce=\"{nonce}\">")));
     }
 }

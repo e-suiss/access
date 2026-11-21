@@ -260,6 +260,22 @@ where
         Ok(Theme::decode(bytes.as_deref()))
     }
 
+    /// The environment's stored branding and text overrides for a page the server draws itself
+    /// (TN-150, TN-175); nothing when they cannot be read now, and the page draws plain.
+    pub async fn page_look(&self, entry: &EnvironmentEntry) -> (Option<Vec<u8>>, Option<Vec<u8>>) {
+        let Ok(kit) = self.kit(entry).await else {
+            return (None, None);
+        };
+        let read = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.environment).await?;
+            let branding = access_store::idp::branding(&mut t).await?;
+            let overrides = access_store::idp::locale_overrides(&mut t).await?;
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>((branding, overrides))
+        };
+        read.await.unwrap_or((None, None))
+    }
+
     /// The path of the environment issuer below its host, for links and headers (§17.9.6).
     ///
     /// # Errors

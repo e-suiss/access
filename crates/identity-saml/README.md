@@ -70,7 +70,7 @@ From the profiles of §10.6.1; actions 1 to 16 come first, 17 to 21 next. Each h
 | 8 | Fixed, case-sensitive attribute names per template; multi-valued attributes | `domain::profile::tests::aws_requires_role_and_session_name` |
 | 9 | `NameFormat` URI by default, override per SP; `FriendlyName` never matched | `domain::sp::tests::registrations_are_checked` |
 | 10 | Exact ACS match; mismatch shown to the user | `domain::request::tests::the_acs_matches_the_registration_exactly` |
-| 11 | HTTP-POST offered for every Response | `app::binding::tests::the_post_page_escapes_and_carries_the_nonce` |
+| 11 | HTTP-POST offered for every Response | `access-http`: `login::post::tests::the_post_page_speaks_the_persons_language_escapes_and_carries_the_nonce` |
 | 12 | Short `NotOnOrAfter`, ±3 min skew, unique IDs | `domain::time::tests::request_windows` |
 | 13 | Audience is the entity ID, or the template's value (Salesforce) | `domain::profile::tests::salesforce_requires_the_assertion_signature_and_its_audience` |
 | 14 | `Recipient` is the ACS; exactly one bearer `SubjectConfirmation` | `app::assertion::tests::a_response_follows_the_ten_rules_and_both_signatures_verify` |

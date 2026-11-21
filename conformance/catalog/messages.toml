@@ -2926,6 +2926,20 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "redirect-title"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "redirect-body"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "signout-confirm_title"
 surface = "login"
 class = "label"

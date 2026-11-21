@@ -58,6 +58,7 @@ pub(crate) struct Jar {
     login: Option<String>,
     ip: IpAddr,
     correlation: String,
+    headers: HeaderMap,
 }
 
 impl Jar {
@@ -74,7 +75,11 @@ impl Jar {
                 .filter(|v| v.len() <= MAX_REQUEST_ID)
                 .unwrap_or("-")
                 .to_owned(),
+            headers: HeaderMap::new(),
         };
+        if let Some(v) = headers.get(header::ACCEPT_LANGUAGE) {
+            jar.headers.insert(header::ACCEPT_LANGUAGE, v.clone());
+        }
         let mut bound: Option<String> = None;
         for (name, value) in cookies(headers) {
             let slot = match name {
@@ -97,6 +102,11 @@ impl Jar {
             jar.session = Some(format!("{s}.{b}"));
         }
         jar
+    }
+
+    /// The request headers a server-drawn page reads: `Accept-Language` (TN-175).
+    pub(crate) const fn page_headers(&self) -> &HeaderMap {
+        &self.headers
     }
 
     pub(crate) fn browser(&self) -> Browser<'_> {
