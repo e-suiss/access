@@ -258,6 +258,7 @@ label-sms_code = Kısa mesajdaki kod
 action-send_sms = Bana kodu mesajla gönder
 sms-sent = Sonu { $last_digits } ile biten numaraya kod gönderdik.
 sms-refused = Bu numara için kısa mesaj kodu şu anda kullanılamıyor. Başka bir yol kullanın.
+sms-code_spent = Bu kod artık geçerli değil. Yeni kod isteyin.
 spc-title = Bu ödemeyi onaylayın
 spc-mismatch = Ödeme bilgileri eşleşmedi. Hiçbir şey onaylanmadı.
 app_factor-title = { $app } içinde onaylayın

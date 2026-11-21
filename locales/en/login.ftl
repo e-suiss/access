@@ -258,6 +258,7 @@ label-sms_code = Code from the text message
 action-send_sms = Text me a code
 sms-sent = We sent a code to the number ending in { $last_digits }.
 sms-refused = Text message codes can't be used for this number right now. Use another way.
+sms-code_spent = This code no longer works. Ask for a new one.
 spc-title = Confirm this payment
 spc-mismatch = The payment details didn't match. Nothing was approved.
 app_factor-title = Confirm in { $app }

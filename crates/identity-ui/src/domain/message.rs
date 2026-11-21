@@ -611,6 +611,9 @@ pub enum TextId {
     /// P2: an SMS method cannot be used now, the same text for a recent SIM change, a missing signal or a template (OP-156 m.3 (f)).
     #[serde(rename = "sms.refused")]
     SmsRefused,
+    /// TN-174: the SMS code ran out of tries, expired or was used; a new one is asked for.
+    #[serde(rename = "sms.code_spent")]
+    SmsCodeSpent,
     /// P8: Secure Payment Confirmation (OP-156 m.3 (g)).
     #[serde(rename = "spc.title")]
     SpcTitle,
@@ -749,7 +752,7 @@ pub enum TextId {
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 244] = [
+    pub const ALL: [Self; 245] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -951,6 +954,7 @@ impl TextId {
         Self::SendSms,
         Self::SmsSent,
         Self::SmsRefused,
+        Self::SmsCodeSpent,
         Self::SpcTitle,
         Self::SpcMismatch,
         Self::AppFactorTitle,
@@ -1202,6 +1206,7 @@ impl TextId {
             Self::SendSms => "action.send_sms",
             Self::SmsSent => "sms.sent",
             Self::SmsRefused => "sms.refused",
+            Self::SmsCodeSpent => "sms.code_spent",
             Self::SpcTitle => "spc.title",
             Self::SpcMismatch => "spc.mismatch",
             Self::AppFactorTitle => "app_factor.title",
@@ -1537,6 +1542,7 @@ impl TextId {
             Self::SmsRefused => {
                 "Text message codes can't be used for this number right now. Use another way."
             }
+            Self::SmsCodeSpent => "This code no longer works. Ask for a new one.",
             Self::SpcTitle => "Confirm this payment",
             Self::SpcMismatch => "The payment details didn't match. Nothing was approved.",
             Self::AppFactorTitle => "Confirm in { $app }",
@@ -1715,6 +1721,7 @@ impl TextId {
                 | Self::SendSms
                 | Self::SmsSent
                 | Self::SmsRefused
+                | Self::SmsCodeSpent
                 | Self::SpcTitle
                 | Self::SpcMismatch
                 | Self::AppFactorTitle

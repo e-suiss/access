@@ -118,6 +118,16 @@ fn examples() -> Vec<(&'static str, Ui)> {
             "second-factor-sms-sent",
             Ui::second_factor(flow(), SecondFactors { sms: true, ..mfa }, None, &POLICY)
                 .with_message(Message::info(TextId::SmsSent).with_arg("last_digits", "67"))
+                .and_then(|u| {
+                    u.with_message(Message::info(TextId::CodeLifetime).with_arg("minutes", "5"))
+                })
+                .unwrap(),
+        ),
+        // TN-174
+        (
+            "second-factor-sms-spent",
+            Ui::second_factor(flow(), SecondFactors { sms: true, ..mfa }, None, &POLICY)
+                .with_message(Message::error(TextId::SmsCodeSpent))
                 .unwrap(),
         ),
         (

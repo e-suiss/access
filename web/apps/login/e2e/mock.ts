@@ -413,6 +413,9 @@ export class LoginMock {
         return { status: 200, ui: withoutNodes(example("complete")) };
       case "recovery_code":
         return { status: 200, ui: example("second-factor-failed") };
+      // TN-174: every code typed here has run out
+      case "sms":
+        return { status: 401, ui: example("second-factor-sms-spent") };
       // TN-162
       case "send_sms":
         return { status: 200, ui: example("second-factor-sms-sent") };

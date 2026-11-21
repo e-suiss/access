@@ -197,6 +197,14 @@ pub const CODE_NOT_ACCEPTED: Problem = Problem {
     retry_after_s: None,
 };
 
+/// TN-174: the SMS code ran out of tries, expired or was used; only a new one works.
+pub const CODE_SPENT: Problem = Problem {
+    status: 401,
+    code: "code-spent",
+    title: "That code no longer works",
+    retry_after_s: None,
+};
+
 /// The step does not fit the flow (after authentication, X34).
 pub const STEP_NOT_ALLOWED: Problem = Problem {
     status: 409,

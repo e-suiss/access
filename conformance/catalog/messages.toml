@@ -4506,6 +4506,14 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "sms-code_spent"
+text_id = "sms.code_spent"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "spc-title"
 text_id = "spc.title"
 surface = "login"

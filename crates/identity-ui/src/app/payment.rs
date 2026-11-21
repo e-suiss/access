@@ -260,24 +260,37 @@ where
         if !matches!(current, Current::Second(..) | Current::PushEnded(..)) {
             return Err(Reply::problem(INVALID_SUBMISSION));
         }
-        let (status, message) = match auth
+        let (status, messages) = match auth
             .send_sms(fref, b.correlation)
             .await
             .map_err(|e| failed(&e))?
         {
-            SmsStart::Sent { last_digits, .. } => (
-                200,
-                Message::info(TextId::SmsSent).with_arg("last_digits", &last_digits),
-            ),
+            SmsStart::Sent {
+                last_digits,
+                expires_ms,
+            } => {
+                // TN-174
+                let minutes = expires_ms
+                    .saturating_sub(self.clock.now_ms())
+                    .div_ceil(60_000)
+                    .to_string();
+                (
+                    200,
+                    vec![
+                        Message::info(TextId::SmsSent).with_arg("last_digits", &last_digits),
+                        Message::info(TextId::CodeLifetime).with_arg("minutes", &minutes),
+                    ],
+                )
+            }
             SmsStart::Refused(why) => {
                 tracing::info!(reason = why.reason(), "sms refused");
-                (403, Message::error(TextId::SmsRefused))
+                (403, vec![Message::error(TextId::SmsRefused)])
             }
             SmsStart::Held { retry_after_s } => {
                 let seconds = u32::try_from(retry_after_s).unwrap_or(u32::MAX);
                 (
                     429,
-                    Message::error(TextId::TooManyAttempts).retry_after(seconds),
+                    vec![Message::error(TextId::TooManyAttempts).retry_after(seconds)],
                 )
             }
             SmsStart::Step(s) => return self.outcome(auth, kit, b, flow, fref, s).await,
@@ -285,7 +298,7 @@ where
         let current = self.current(auth, kit, b, fref).await?;
         let mut reply = self.render(auth, kit, flow, fref, current, status).await?;
         if let Body::Ui(ui) = &mut reply.body {
-            ui.messages.push(message);
+            ui.messages.extend(messages);
         }
         Ok(reply)
     }
@@ -417,7 +430,9 @@ where
                 .await
             {
                 Ok(Activation::Proven) => {}
-                Ok(Activation::NotAccepted) => return Reply::problem(CODE_REFUSED),
+                Ok(Activation::NotAccepted | Activation::Spent) => {
+                    return Reply::problem(CODE_REFUSED);
+                }
                 Ok(Activation::Refused(why)) => {
                     tracing::info!(reason = why.reason(), "activation sms refused");
                     return Reply::problem(SMS_REFUSED);

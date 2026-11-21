@@ -331,7 +331,7 @@ impl Web {
     }
 }
 
-// OP-156 m.3 (f), §10.2.2, IDP-4, IDP-8, Ek B 5397
+// OP-156 m.3 (f), §10.2.2, IDP-4, IDP-8, Ek B 5397, TN-174
 #[tokio::test]
 async fn an_sms_code_is_a_second_step_of_six_digits_five_minutes_and_three_tries() {
     let off = env(0x61, "q6-sms-off", AuthPolicy::DEFAULT).await;
@@ -354,12 +354,20 @@ async fn an_sms_code_is_a_second_step_of_six_digits_five_minutes_and_three_tries
     );
     assert!(sent.messages().contains(&String::from("sms.sent")));
     assert!(sent.json().to_string().contains("ending in 02"));
+    // TN-174
+    assert!(
+        sent.json()["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["id"] == "code.lifetime" && m["args"]["minutes"] == "5")
+    );
     assert_eq!(e.sms_count(), 1);
     let code = e.outbox.last();
     assert_eq!(code.len(), 6);
     assert!(code.bytes().all(|c| c.is_ascii_digit()));
     let wrong = if code == "000000" { "111111" } else { "000000" };
-    for _ in 0..3 {
+    for _ in 0..2 {
         let r = b.submit(&sent, "sms", json!({ "sms_code": wrong })).await;
         assert_eq!(
             r.messages(),
@@ -367,10 +375,17 @@ async fn an_sms_code_is_a_second_step_of_six_digits_five_minutes_and_three_tries
         );
         e.advance(10_000);
     }
+    // TN-174
+    let third = b.submit(&sent, "sms", json!({ "sms_code": wrong })).await;
+    assert_eq!(
+        third.messages(),
+        ["second_factor.account", "sms.code_spent"]
+    );
+    e.advance(10_000);
     let spent = b.submit(&sent, "sms", json!({ "sms_code": code })).await;
     assert_eq!(
         spent.messages(),
-        ["second_factor.account", "second_factor.failed"]
+        ["second_factor.account", "sms.code_spent"]
     );
 
     e.advance(30_000);
@@ -378,10 +393,7 @@ async fn an_sms_code_is_a_second_step_of_six_digits_five_minutes_and_three_tries
     let code = e.outbox.last();
     e.advance(300_000);
     let late = b.submit(&sent, "sms", json!({ "sms_code": code })).await;
-    assert_eq!(
-        late.messages(),
-        ["second_factor.account", "second_factor.failed"]
-    );
+    assert_eq!(late.messages(), ["second_factor.account", "sms.code_spent"]);
 
     e.advance(60_000);
     let sent = b.submit(&second, "send_sms", json!({})).await;

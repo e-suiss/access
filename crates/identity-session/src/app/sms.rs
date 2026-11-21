@@ -13,14 +13,14 @@ use suiss_crypto::digest::sha256;
 
 use super::signin::ANONYMOUS;
 use super::{
-    Auth, CODE_NOT_ACCEPTED, FlowRef, Notifier, STEP_NOT_ALLOWED, Step, audit, gone, load, neutral,
-    refuse,
+    Auth, CODE_NOT_ACCEPTED, CODE_SPENT, FlowRef, Notifier, STEP_NOT_ALLOWED, Step, audit, gone,
+    load, neutral, refuse,
 };
 use crate::SessionError;
 use crate::domain::assurance::Factor;
 use crate::domain::payment::{
-    CODE_TTL_MS, MAX_SENDS, SEND_WINDOW_MS, SimRefusal, SimSignals, SmsPurpose, code_digest,
-    code_of, sim_rule, well_formed,
+    CODE_TTL_MS, MAX_SENDS, MAX_TRIES, SEND_WINDOW_MS, SimRefusal, SimSignals, SmsPurpose,
+    code_digest, code_of, sim_rule, well_formed,
 };
 use crate::ports::{Clock, PaymentTx as _, Random, SessionDb, SessionTx as _};
 use access_identity_account::ports::AccountTx as _;
@@ -61,8 +61,10 @@ pub enum SmsStart {
 pub enum Activation {
     /// The code matched and is used.
     Proven,
-    /// The code did not match, ran out of tries or expired.
+    /// The code did not match and tries are left.
     NotAccepted,
+    /// TN-174: no live code: it ran out of tries, expired or was used.
+    Spent,
     /// The line takes no code now.
     Refused(SimRefusal),
 }
@@ -196,15 +198,26 @@ where
             return Ok(Activation::Refused(why));
         }
         let Some(row) = tx.sms_code(binding, purpose.name()).await? else {
-            return Ok(Activation::NotAccepted);
+            return Ok(Activation::Spent);
         };
-        if row.subject != subject || row.used_ms.is_some() || now >= row.expires_ms {
+        if row.subject != subject {
             return Ok(Activation::NotAccepted);
+        }
+        if row.used_ms.is_some() || now >= row.expires_ms {
+            return Ok(Activation::Spent);
         }
         let typed = typed.trim();
         let matched = well_formed(typed) && code_digest(binding, typed) == row.code_hash;
-        if !tx.try_sms_code(row.id, matched.then_some(now)).await? || !matched {
-            return Ok(Activation::NotAccepted);
+        if !tx.try_sms_code(row.id, matched.then_some(now)).await? {
+            return Ok(Activation::Spent);
+        }
+        if !matched {
+            // TN-174
+            return Ok(if row.attempts.saturating_add(1) >= MAX_TRIES {
+                Activation::Spent
+            } else {
+                Activation::NotAccepted
+            });
         }
         Ok(Activation::Proven)
     }
@@ -289,6 +302,11 @@ where
                 audit(&mut tx, "login.sms.failed", ANONYMOUS, &target, correlation).await?;
                 tx.commit().await?;
                 return Ok(refuse(CODE_NOT_ACCEPTED));
+            }
+            Activation::Spent => {
+                audit(&mut tx, "login.sms.failed", ANONYMOUS, &target, correlation).await?;
+                tx.commit().await?;
+                return Ok(refuse(CODE_SPENT));
             }
         }
         audit(

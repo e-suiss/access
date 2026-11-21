@@ -329,6 +329,8 @@ function MethodForm(props: {
   readonly busy: boolean;
   readonly options: Fields;
   readonly onSubmit: (submission: Submission) => void;
+  /** TN-174: the code went out; this method's button asks for a new one after a short wait. */
+  readonly resend?: boolean;
 }) {
   const inputs = props.nodes.filter(
     (n): n is InputNode => n.type === "input" && n.method === props.method,
@@ -378,10 +380,10 @@ function MethodForm(props: {
         ),
       )}
       {buttons.map((node) =>
-        props.method === "resend" ? (
+        props.method === "resend" || props.resend === true ? (
           <Resend
             key={node.label.id}
-            label={text(node.label)}
+            label={props.method === "resend" ? text(node.label) : t("action.resend_code")}
             busy={props.busy}
             since={props.nodes}
           />
@@ -792,6 +794,9 @@ export function StepView({ ui, busy, onSubmit }: Props) {
     if (!WAY_METHODS[way].includes(method)) return false;
     return method !== "sms" || smsSent.has(ui.flow);
   };
+  // TN-174: read with the step's messages, so a new answer on the same flow reads the set again
+  const sentSms =
+    second && (ui.messages.some((m) => m.id === "sms.sent") || smsSent.has(ui.flow));
   const submit = (s: Submission) => {
     if (s.method === "send_sms") smsSent.add(ui.flow);
     onSubmit(s);
@@ -865,6 +870,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
       )}
       {methodsInOrder(ui.nodes)
         .filter((m) => m !== "restart" && m !== "skip" && visible(m))
+        .sort((a, b) => Number(a === "send_sms" && sentSms) - Number(b === "send_sms" && sentSms))
         .map((method) => (
           <MethodForm
             key={method}
@@ -875,6 +881,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
             busy={busy}
             options={options}
             onSubmit={submit}
+            resend={method === "send_sms" && sentSms}
           />
         ))}
       {passkeyButton !== undefined && passkeysSupported() && (!second || way === "passkey") && (

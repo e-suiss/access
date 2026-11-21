@@ -60,7 +60,7 @@ use access_identity_session::app::profile::ProfileStep;
 use access_identity_session::app::push::{PushEnd, PushPoll, PushWait};
 use access_identity_session::app::signin::{Identify, LinkOutcome, LinkPreview, PasswordStep};
 use access_identity_session::app::{
-    Auth, CODE_NOT_ACCEPTED, FLOW_GONE, FlowRef, Refusal, Step as Outcome,
+    Auth, CODE_NOT_ACCEPTED, CODE_SPENT, FLOW_GONE, FlowRef, Refusal, Step as Outcome,
 };
 use access_identity_session::domain::assurance::{Aal, MethodClass};
 use access_identity_session::domain::requirement::{MfaPolicy, Requirement as Needed};
@@ -1717,6 +1717,8 @@ where
         if let Body::Ui(ui) = &mut reply.body {
             let id = if !second {
                 TextId::LoginFailed
+            } else if problem == CODE_SPENT {
+                TextId::SmsCodeSpent
             } else if problem == CODE_NOT_ACCEPTED || problem == REJECTED {
                 TextId::SecondFactorFailed
             } else {

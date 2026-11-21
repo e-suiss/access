@@ -515,6 +515,16 @@ test("the second step shows one way at a time and the code field only after the 
   const sms = page.getByLabel("Code from the text message");
   await expect(sms).toBeVisible();
   await expect(sms).toHaveAttribute("inputmode", "numeric");
+  // TN-174
+  await expect(page.getByText("The code works for 5 minutes.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Text me a code" })).toHaveCount(0);
+  await expect(page.getByTestId("resend")).toBeDisabled();
+  await sms.fill("123456");
+  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "This code no longer works. Ask for a new one.",
+  );
+  await expect(page.getByTestId("resend")).toBeVisible();
   await page.getByRole("button", { name: "Try another way" }).click();
   await expect(page.locator("[data-way=recovery_code]")).toBeVisible();
 });

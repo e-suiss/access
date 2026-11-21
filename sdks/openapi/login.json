@@ -968,6 +968,7 @@
           "action.send_sms",
           "sms.sent",
           "sms.refused",
+          "sms.code_spent",
           "spc.title",
           "spc.mismatch",
           "app_factor.title",

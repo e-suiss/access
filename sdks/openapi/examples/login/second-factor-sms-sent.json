@@ -98,6 +98,14 @@
       "args": {
         "last_digits": "67"
       }
+    },
+    {
+      "id": "code.lifetime",
+      "text": "The code works for 5 minutes.",
+      "severity": "info",
+      "args": {
+        "minutes": "5"
+      }
     }
   ]
 }
