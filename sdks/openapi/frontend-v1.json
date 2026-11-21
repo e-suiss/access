@@ -905,7 +905,7 @@
     "/v1/account/email/{change}": {
       "post": {
         "operationId": "confirmEmailChange",
-        "summary": "Confirms the new address with its out-of-band code.",
+        "summary": "Confirms the new address with its out-of-band code; the old address is told and every other session ends, this one goes on (TN-179).",
         "responses": {
           "200": {
             "description": "OK",
@@ -975,7 +975,7 @@
     "/v1/account/phone/{change}": {
       "post": {
         "operationId": "confirmPhoneChange",
-        "summary": "Confirms the new phone number with its text message code; the old number is told and every other session ends (TN-156).",
+        "summary": "Confirms the new phone number with its text message code; the old number is told and every other session ends, this one goes on (TN-156, TN-179).",
         "responses": {
           "200": {
             "description": "OK",

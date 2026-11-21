@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_passkey_labels (tenant_id, environment_id, credential_id,\n                    label, created_ms)\n             VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8e7eaf3a7db64d1dea9a9acbf3b5c4bf0a2f1229731cc8adbee087bf317e5217"
+}

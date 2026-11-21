@@ -44,6 +44,9 @@ test("passkeys are created, seen and removed here (TN-99)", async ({ page, bff }
   await passkeys.getByRole("button", { name: "Create a passkey" }).click();
   await expect(said(page)).toHaveText("Added.");
   await expect(passkeys.getByTestId("passkey-row")).toHaveCount(2);
+  // TN-180
+  await expect(passkeys.getByTestId("passkey-row").nth(1)).toContainText("Work key");
+  expect(bff.seen.find((s) => s.path.endsWith("/passkeys"))?.body).toEqual({ name: "Work key" });
   const finish = bff.seen.find((s) => s.path.endsWith("/passkeys/reg_1"));
   expect(finish?.body["credential"]).toEqual({ id: "bmV3", type: "public-key", response: {} });
   expect(finish?.headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
@@ -368,7 +371,39 @@ test("the phone number is changed with a code sent to the new one", async ({ pag
   );
   await phone.getByLabel("Code from the text message").fill("123456");
   await phone.getByRole("button", { name: "Verify" }).click();
-  await page.waitForURL(/\/login$/);
+  // TN-179
+  await expect(said(page)).toHaveText(
+    "Your phone number was changed. Sign-ins on your other devices were ended.",
+  );
+  await expect(page).toHaveURL(/\/account\/$/);
+});
+
+// TN-179: the e-mail address is changed with a code to the new one; this sign-in goes on
+test("the email address is changed with a code sent to the new one", async ({ page, bff }) => {
+  await page.clock.install();
+  bff.methods = { ...bff.methods, email: { set: true, address: "ada@example.org" } };
+  await page.goto("/account/");
+  const email = page.getByTestId("email");
+  await expect(email).toContainText("ada@example.org");
+  await email.getByRole("button", { name: "Change email address" }).click();
+  await email.getByLabel("New email address").fill("ada@new.example");
+  await email.getByRole("button", { name: "Continue" }).click();
+  await expect(said(page)).toHaveText("We sent a code to the new address.");
+  await expect(email.getByTestId("sent-to")).toHaveText("We sent a code to ada@new.example.");
+  await expect(email).toContainText("The code works for 15 minutes.");
+  const resend = email.getByTestId("resend");
+  await expect(resend).toBeDisabled();
+  await page.clock.runFor(31_000);
+  await expect(resend).toBeEnabled();
+  await email.getByLabel("Code from the email").fill("123456");
+  await email.getByRole("button", { name: "Verify" }).click();
+  await expect(said(page)).toHaveText(
+    "Your email address was changed. Sign-ins on your other devices were ended.",
+  );
+  await expect(email).toContainText("ada@new.example");
+  expect(bff.seen.find((x) => x.path.endsWith("/account/email"))?.body).toEqual({
+    email: "ada@new.example",
+  });
 });
 
 // TN-158: the identity details the environment asked for are shown, the number masked

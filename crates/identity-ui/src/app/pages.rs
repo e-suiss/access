@@ -600,6 +600,11 @@ where
         } else {
             Value::Null
         };
+        // TN-179
+        let email = match self.identifier_value(&kit, subject, "email").await {
+            Ok(address) => json!({ "set": address.is_some(), "address": address }),
+            Err(r) => return r,
+        };
         // TN-158
         let identity = if kit.auth.require_national_id || kit.auth.require_birthdate {
             match self.identity_facts(&kit, subject).await {
@@ -622,7 +627,7 @@ where
                 },
                 "passkeys": of("webauthn").map(|r| json!({
                     "id": id(r),
-                    "name": Value::Null,
+                    "name": r.label,
                     "created_at": rfc3339(r.created_ms),
                     "synced": r.synced.unwrap_or(false),
                 })).collect::<Vec<_>>(),
@@ -638,6 +643,7 @@ where
                     "of": access_identity_session::domain::codes::RECOVERY_CODES,
                 },
                 "phone": phone,
+                "email": email,
                 "setup_after": setup_after,
             }),
         )
@@ -670,6 +676,33 @@ where
             "national_id_scheme": get("national_id_scheme"),
             "birthdate": get("birthdate"),
         }))
+    }
+
+    /// The account's live identifier of `kind`, revealed.
+    async fn identifier_value(
+        &self,
+        kit: &EnvironmentKit,
+        subject: [u8; 16],
+        kind: &str,
+    ) -> Result<Option<String>, Reply> {
+        let read = async {
+            let t = access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.environment)
+                .await
+                .map_err(access_identity_account::AccountError::from)?;
+            let mut tx = access_identity_account::adapters::pg::PgTx(t, Some(kit.vault()));
+            let mut out = None;
+            for row in tx.0.identifiers(subject).await? {
+                if row.live && row.kind == kind {
+                    out = tx.reveal(subject, &row.stored).await?;
+                    break;
+                }
+            }
+            tx.0.commit()
+                .await
+                .map_err(access_identity_account::AccountError::from)?;
+            Ok::<_, access_identity_account::AccountError>(out)
+        };
+        read.await.map_err(|e| failed(&e.into()))
     }
 
     async fn phone_ending(

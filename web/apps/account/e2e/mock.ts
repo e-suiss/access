@@ -161,7 +161,7 @@ export class AccountMock {
     await context.route("**/account/api/**", (r) => this.bff(r));
     await context.route("**/v1/account/**", (r) => this.frontend(r));
     await context.route(
-      /\/v1\/account\/(methods|password|passkeys|totp|recovery-codes|linked|connected-apps|method-proof|phone)/,
+      /\/v1\/account\/(methods|password|passkeys|totp|recovery-codes|linked|connected-apps|method-proof|phone|email)/,
       (r) => this.s11(r),
     );
     await context.route(/\/v1\/(sessions|me)(\/|$)/, (r) => this.s10(r));
@@ -555,7 +555,9 @@ export class AccountMock {
           ...this.methods.passkeys,
           {
             id: "crd_pk2",
-            name: String(this.seen.find((x) => x.path.endsWith("/passkeys"))?.body["name"]),
+            name:
+              String(this.seen.find((x) => x.path.endsWith("/passkeys"))?.body["name"] ?? "") ||
+              null,
             created_at: "2026-11-09T09:00:00Z",
             synced: false,
           },
@@ -601,10 +603,15 @@ export class AccountMock {
       };
       return reply(200, { acknowledged: true });
     }
-    // TN-156
-    if (path === "/phone") return reply(202, { change: "rph_1" });
-    if (path === "/phone/rph_1") {
-      return s.body["code"] === "123456" ? reply(204) : reply(401, { code: "code-not-accepted" });
+    // TN-156, TN-179
+    if (path === "/phone") return reply(202, { change: "rph_1", minutes: 15 });
+    if (path === "/email") return reply(202, { change: "rem_1", minutes: 15 });
+    if (path === "/phone/rph_1" || path === "/email/rem_1") {
+      if (s.body["code"] !== "123456") return reply(401, { code: "code-not-accepted" });
+      if (path === "/email/rem_1") {
+        this.methods = { ...this.methods, email: { set: true, address: "ada@new.example" } };
+      }
+      return reply(204);
     }
     if (path === "/linked" && method === "POST") {
       return reply(200, { redirect_to: "https://accounts.example/authorize?state=s" });
@@ -682,6 +689,7 @@ export interface S11Methods {
   totp: { id: string; created_at: string }[];
   recovery_codes: { set: boolean; acknowledged: boolean; left?: number; of?: number };
   phone?: { set: boolean; ends_with: string | null } | null;
+  email?: { set: boolean; address: string | null } | null;
   setup_after?: string | null;
   identity?: {
     national_id: string | null;

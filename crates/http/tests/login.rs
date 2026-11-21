@@ -1659,7 +1659,7 @@ async fn totp_recovery_codes_and_sign_out() {
     );
 }
 
-// §10.2.4, TN-96, TN-97, OP-146 m.9, OP-149 m.16 (a)
+// §10.2.4, TN-96, TN-97, OP-146 m.9, OP-149 m.16 (a), TN-180
 #[tokio::test]
 async fn a_passkey_registered_from_a_session_signs_in() {
     let e = env(7, "lg-g", AuthPolicy::DEFAULT).await;
@@ -1669,12 +1669,14 @@ async fn a_passkey_registered_from_a_session_signs_in() {
     let reg = b
         .post(
             "/v1/account/passkeys",
-            Some(json!({ "name": "bob@example.com" })),
+            Some(json!({ "name": "Work laptop" })),
         )
         .await;
     assert_eq!(reg.status, StatusCode::CREATED);
     b.proved(&reg, "registration").await;
     let r = reg.json();
+    // TN-180
+    assert_eq!(r["options"]["user"]["name"], "bob@example.com");
     let challenge = b64url_decode(r["options"]["challenge"].as_str().unwrap()).unwrap();
     let user = r["options"]["user"]["id"].as_str().unwrap().to_owned();
     let mut key = Authenticator::new(Key::es256());
@@ -1702,6 +1704,9 @@ async fn a_passkey_registered_from_a_session_signs_in() {
         "{}",
         String::from_utf8_lossy(&done.body)
     );
+    // TN-180
+    let methods = b.get("/v1/account/methods").await;
+    assert_eq!(methods.json()["passkeys"][0]["name"], "Work laptop");
 
     let mut c = e.browser("c");
     let first = c.start().await;
@@ -3901,11 +3906,16 @@ async fn the_mailbox_proof_kills_a_password_set_before_it() {
     assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
 }
 
-// OP-153 m.3 (i), TN-64, TN-66, TN-69, TN-76 m.5, §8.6
+// OP-153 m.3 (i), TN-64, TN-66, TN-69, TN-76 m.5, §8.6, TN-179
 #[tokio::test]
 async fn an_email_change_proves_the_new_address_and_tells_the_old_one() {
     let e = env(37, "su-g", AuthPolicy::DEFAULT).await;
     let subject = e.account("old@example.com").await;
+    let mut elsewhere = e.browser("su-g-elsewhere");
+    assert_eq!(
+        elsewhere.sign_in("old@example.com").await.step(),
+        "complete"
+    );
     let mut b = e.browser("su-g");
     assert_eq!(b.sign_in("old@example.com").await.step(), "complete");
     let started = b
@@ -3921,6 +3931,8 @@ async fn an_email_change_proves_the_new_address_and_tells_the_old_one() {
         String::from_utf8_lossy(&started.body)
     );
     let change = started.json()["change"].as_str().unwrap().to_owned();
+    // TN-179
+    assert_eq!(started.json()["minutes"], 15);
     let (kind, since, _) = *e.sent().last().unwrap();
     assert_eq!(kind, "relay.message.otp.v1");
     assert_eq!(since, Some(e.clock.now_ms()));
@@ -3950,9 +3962,16 @@ async fn an_email_change_proves_the_new_address_and_tells_the_old_one() {
     assert_eq!(notice.0, "relay.message.email_changed.v1");
     assert_eq!(notice.2, subject);
     assert!(notice.1.is_some());
+    // TN-179
+    assert_eq!(b.get("/v1/sessions/current").await.status, StatusCode::OK);
     assert_eq!(
-        b.get("/v1/sessions/current").await.status,
+        elsewhere.get("/v1/sessions/current").await.status,
         StatusCode::UNAUTHORIZED
+    );
+    let methods = b.get("/v1/account/methods").await;
+    assert_eq!(
+        methods.json()["email"],
+        json!({ "set": true, "address": "new@example.com" })
     );
     // TN-76 m.5
     let before = e.sent().len();

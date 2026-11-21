@@ -690,7 +690,7 @@ where
         &self,
         kit: &EnvironmentKit,
         b: &Browser<'_>,
-    ) -> Result<[u8; 16], Reply> {
+    ) -> Result<([u8; 16], [u8; 16]), Reply> {
         signin!(self, kit, auth);
         let Some(cookie) = b.session else {
             return Err(Reply::problem(SESSION_REQUIRED));
@@ -704,7 +704,7 @@ where
         if self.clock.now_ms().saturating_sub(last) > STEP_UP_MAX_AGE_MS {
             return Err(Reply::problem(STEP_UP_REQUIRED));
         }
-        Ok(v.subject)
+        Ok((v.subject, v.id))
     }
 
     /// `POST /v1/account/credential-export` (TN-86, B19): after a fresh step-up, the owner's
@@ -725,7 +725,7 @@ where
         {
             return r;
         }
-        let subject = match self.fresh_subject(&kit, b).await {
+        let (subject, _) = match self.fresh_subject(&kit, b).await {
             Ok(s) => s,
             Err(r) => return r,
         };
@@ -780,7 +780,7 @@ where
         {
             return r;
         }
-        let subject = match self.fresh_subject(&kit, b).await {
+        let (subject, _) = match self.fresh_subject(&kit, b).await {
             Ok(s) => s,
             Err(r) => return r,
         };
@@ -823,7 +823,10 @@ where
             )
             .await
         {
-            Ok(Started::Sent { .. }) => Reply::json(202, json!({ "change": handle })),
+            Ok(Started::Sent { .. }) => Reply::json(
+                202,
+                json!({ "change": handle, "minutes": access_identity_account::domain::registration::CODE_TTL_MS / 60_000 }),
+            ),
             Ok(Started::Refused(Refused::Throttled { retry_after_ms })) => {
                 Reply::problem(Problem {
                     status: 429,
@@ -929,7 +932,10 @@ where
             )
             .await
         {
-            Ok(Started::Sent { .. }) => Reply::json(202, json!({ "change": handle })),
+            Ok(Started::Sent { .. }) => Reply::json(
+                202,
+                json!({ "change": handle, "minutes": access_identity_account::domain::registration::CODE_TTL_MS / 60_000 }),
+            ),
             Ok(Started::Refused(Refused::Throttled { retry_after_ms })) => {
                 Reply::problem(Problem {
                     status: 429,
@@ -949,7 +955,8 @@ where
     }
 
     /// `POST /v1/account/email/{change}` (OP-153 m.3 (i), TN-64): the code from the new address
-    /// makes it the account's; the old address is told and every session ends.
+    /// makes it the account's; the old address is told and every other session ends, this one
+    /// goes on (TN-179).
     pub async fn confirm_email_change(
         &self,
         entry: &EnvironmentEntry,
@@ -972,7 +979,7 @@ where
         {
             return r;
         }
-        let subject = match self.fresh_subject(&kit, b).await {
+        let (subject, session_id) = match self.fresh_subject(&kit, b).await {
             Ok(s) => s,
             Err(r) => return r,
         };
@@ -998,7 +1005,7 @@ where
         };
         match registrar
             .complete_change(
-                subject,
+                (subject, Some(session_id)),
                 &handle_digest(&secret),
                 &session_digest(session),
                 code,
@@ -1008,11 +1015,8 @@ where
             )
             .await
         {
-            Ok(Proven::Done { .. }) => Reply::new(204, Body::Empty).cookie(Some(
-                access_identity_session::domain::session::clear_cookie(
-                    access_identity_session::domain::session::SESSION_COOKIE,
-                ),
-            )),
+            // TN-179
+            Ok(Proven::Done { .. }) => Reply::new(204, Body::Empty),
             Ok(Proven::Wrong) => Reply::problem(access_identity_session::app::CODE_NOT_ACCEPTED),
             Ok(Proven::Gone) => Reply::problem(FLOW_GONE),
             Err(e) => failed(&e.into()),
@@ -1236,7 +1240,7 @@ where
         };
         match registrar
             .complete_change(
-                subject,
+                (subject, None),
                 &flow_hash,
                 &device_hash,
                 code,

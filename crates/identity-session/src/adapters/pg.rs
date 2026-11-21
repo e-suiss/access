@@ -231,6 +231,15 @@ impl SessionTx for PgTx {
         Ok(self.0.has_national_id(subject).await?)
     }
 
+    async fn label_passkey(
+        &mut self,
+        credential: [u8; 16],
+        label: &str,
+        now_ms: u64,
+    ) -> Result<(), SessionError> {
+        Ok(self.0.label_passkey(credential, label, now_ms).await?)
+    }
+
     async fn pending_documents(
         &mut self,
         subject: [u8; 16],

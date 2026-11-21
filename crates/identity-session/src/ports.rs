@@ -192,6 +192,13 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<Vec<String>, SessionError>> + Send;
+    /// TN-180: names the passkey `credential` as the person typed it.
+    fn label_passkey(
+        &mut self,
+        credential: [u8; 16],
+        label: &str,
+        now_ms: u64,
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
     /// Which of the documents named by `digests` the subject has not accepted (TN-158 (12)).
     fn pending_documents(
         &mut self,

@@ -207,7 +207,7 @@ test("a passkey that fails says so, and a dismissed prompt stays quiet", async (
   const button = page.getByRole("button", { name: "Sign in with a passkey" });
   await button.click();
   await expect(page.getByRole("alert")).toHaveText(
-    "The passkey couldn't be used. Try again, or continue with your email.",
+    "The passkey couldn't be used. Try again, or continue another way.",
   );
 
   await page.evaluate(() => {

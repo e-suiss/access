@@ -724,8 +724,8 @@ where
     pub async fn begin_passkey(
         &self,
         cookie: &str,
-        name: &str,
-        display_name: &str,
+        (name, display_name): (&str, &str),
+        label: Option<&str>,
     ) -> Result<Result<PasskeyRegistration, Gate>, SessionError> {
         let now = self.now();
         let mut tx = self.begin().await?;
@@ -752,6 +752,7 @@ where
             conditional: start.state.conditional,
             expires_at_s: start.state.expires_at,
             prf_salt: start.state.prf_salt.map(|s| s.0),
+            label: label.map(String::from),
         });
         let flow = self
             .proved_flow(
@@ -820,9 +821,18 @@ where
             expires_at: reg.expires_at_s,
             prf_salt: reg.prf_salt.map(PrfSalt),
         };
-        Ok(Ok(self
+        let outcome = self
             .register_passkey(session.subject, &state, response, correlation)
-            .await?))
+            .await?;
+        // TN-180
+        if let (RegistrationOutcome::Registered(record), Some(label)) = (&outcome, &reg.label) {
+            let mut tx = self.begin().await?;
+            if let Some(credential) = tx.passkey_credential(record.id.as_bytes()).await? {
+                tx.label_passkey(credential, label, now).await?;
+            }
+            tx.commit().await?;
+        }
+        Ok(Ok(outcome))
     }
 
     /// Registers the passkey `response` answers `state` with, for `subject` (§10.2.4, OP-150

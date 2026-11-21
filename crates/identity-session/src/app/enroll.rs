@@ -161,6 +161,7 @@ where
                 conditional: start.state.conditional,
                 expires_at_s: start.state.expires_at,
                 prf_salt: start.state.prf_salt.map(|s| s.0),
+                label: None,
             });
             Some(start.options)
         } else {

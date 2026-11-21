@@ -388,7 +388,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/account/email/{change}",
         "confirmEmailChange",
-        "Confirms the new address with its out-of-band code.",
+        "Confirms the new address with its out-of-band code; the old address is told and every other session ends, this one goes on (TN-179).",
     ),
     live(
         Owner::N1,
@@ -402,7 +402,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/account/phone/{change}",
         "confirmPhoneChange",
-        "Confirms the new phone number with its text message code; the old number is told and every other session ends (TN-156).",
+        "Confirms the new phone number with its text message code; the old number is told and every other session ends, this one goes on (TN-156, TN-179).",
     ),
     lane(
         Owner::N2,

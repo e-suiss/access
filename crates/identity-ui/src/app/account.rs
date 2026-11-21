@@ -417,13 +417,14 @@ where
         }
     }
 
-    /// `POST /v1/account/passkeys`: starts a passkey registration (§10.2.4).
+    /// `POST /v1/account/passkeys`: starts a passkey registration (§10.2.4). The authenticator
+    /// names the account by its identifier; `label` is the person's own name for the passkey,
+    /// kept for the account page (TN-180).
     pub async fn begin_passkey(
         &self,
         entry: &EnvironmentEntry,
         b: &Browser<'_>,
-        name: &str,
-        display_name: &str,
+        label: Option<&str>,
     ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
@@ -436,9 +437,19 @@ where
         {
             return r;
         }
+        let (subject, _) = match self.linking_session(&kit, b).await {
+            Ok(s) => s,
+            Err(r) => return r,
+        };
+        // TN-180
+        let account = match self.account_label(&kit, subject).await {
+            Ok(Some(a)) => a,
+            Ok(None) => kit.environment().external(subject).unwrap_or_default(),
+            Err(e) => return failed(&e.into()),
+        };
         signin!(self, kit, auth);
         match auth
-            .begin_passkey(b.session.unwrap_or_default(), name, display_name)
+            .begin_passkey(b.session.unwrap_or_default(), (&account, &account), label)
             .await
         {
             Ok(Ok(reg)) => Reply::json(

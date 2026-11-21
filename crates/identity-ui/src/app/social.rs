@@ -567,7 +567,7 @@ where
 
     /// TN-161: the signed-in account as the share page names it: its e-mail address, else its
     /// phone number.
-    async fn account_label(
+    pub(crate) async fn account_label(
         &self,
         kit: &EnvironmentKit,
         subject: [u8; 16],

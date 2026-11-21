@@ -935,7 +935,10 @@ async fn a_suspended_code_expires() {
 
 async fn register_passkey(e: &Env, cookie: &str, auth: &mut Authenticator) -> Vec<u8> {
     let reg = e
-        .with(async |a| a.begin_passkey(cookie, "alice@example.com", "Alice").await)
+        .with(async |a| {
+            a.begin_passkey(cookie, ("alice@example.com", "Alice"), None)
+                .await
+        })
         .await
         .unwrap()
         .unwrap();

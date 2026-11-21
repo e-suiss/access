@@ -56,6 +56,10 @@ export const Methods = v.object({
     v.nullable(v.object({ set: v.boolean(), ends_with: v.nullable(v.string()) })),
     null,
   ),
+  email: v.optional(
+    v.nullable(v.object({ set: v.boolean(), address: v.nullable(v.string()) })),
+    null,
+  ),
   setup_after: v.optional(v.nullable(v.string()), null),
   identity: v.optional(
     v.nullable(
@@ -69,7 +73,13 @@ export const Methods = v.object({
   ),
 });
 
-const PhoneChange = v.object({ change: v.string() });
+const ContactChange = v.object({
+  change: v.string(),
+  minutes: v.optional(v.number()),
+});
+
+/** TN-179: how long "Send a new code" waits after a code went. */
+export const RESEND_WAIT_S = 30;
 export type Methods = v.InferOutput<typeof Methods>;
 
 const Enrollment = v.object({
@@ -245,7 +255,8 @@ function Passkeys(props: {
   });
   const add = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
-    create.mutate(name.trim() === "" ? t("methods.passkey_unnamed") : name.trim());
+    // TN-180: an unnamed passkey is listed as "Passkey" with its date
+    create.mutate(name.trim());
   };
   return (
     <Part aria-labelledby="passkeys-heading" data-testid="passkeys">
@@ -309,6 +320,7 @@ function Passkeys(props: {
             value={name}
             maxLength={64}
             autoComplete="off"
+            placeholder={t("methods.passkey_name_example")}
             onChange={(e) => {
               setName(e.target.value);
             }}
@@ -427,8 +439,6 @@ function Password(props: {
   );
 }
 
-// TN-156: a phone number is added or changed with a text message code to the new number; the old
-// number is told and every sign-in ends, this one too
 // TN-158: what the environment asked for at sign-up; changed only through support
 function Identity(props: {
   readonly identity: {
@@ -457,78 +467,121 @@ function Identity(props: {
   );
 }
 
-function Phone(props: {
-  readonly phone: { readonly set: boolean; readonly ends_with: string | null };
+// TN-156, TN-179: an e-mail address or phone number is added or changed with a code to the new one;
+// the old one is told and every other sign-in ends, this one goes on
+type ContactKind = "email" | "phone";
+
+function ResendCode(props: { readonly onSend: () => void; readonly busy: boolean }): ReactElement {
+  const [left, setLeft] = useState(RESEND_WAIT_S);
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    setLeft(RESEND_WAIT_S);
+    const timer = window.setInterval(() => {
+      setLeft((s) => {
+        if (s <= 1) window.clearInterval(timer);
+        return Math.max(0, s - 1);
+      });
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [round]);
+  return (
+    <Button
+      variant="outline"
+      disabled={props.busy || left > 0}
+      data-testid="resend"
+      onClick={() => {
+        setRound((n) => n + 1);
+        props.onSend();
+      }}
+    >
+      {left > 0 ? t("methods.resend_in", { seconds: String(left) }) : t("methods.resend_code")}
+    </Button>
+  );
+}
+
+function Contact(props: {
+  readonly kind: ContactKind;
+  readonly shown: string | null;
   readonly say: (text: string, alert?: boolean) => void;
   readonly fail: (e: unknown, codes?: Readonly<Record<string, string>>) => void;
+  readonly onChanged: () => void;
 }): ReactElement {
-  const [step, setStep] = useState<"idle" | "number" | { readonly change: string }>("idle");
+  const { kind } = props;
+  const [step, setStep] = useState<
+    "idle" | "value" | { readonly change: string; readonly to: string; readonly minutes?: number }
+  >("idle");
   const start = useMutation({
-    mutationFn: (phone: string) =>
-      json(frontend("/v1/account/phone", { method: "POST", body: { phone } }), PhoneChange),
+    mutationFn: (value: string) =>
+      json(
+        frontend(`/v1/account/${kind}`, { method: "POST", body: { [kind]: value } }),
+        ContactChange,
+      ).then((c) => ({ ...c, to: value })),
     onSuccess: (c) => {
-      setStep({ change: c.change });
-      props.say(t("methods.phone_code_sent"));
+      setStep({
+        change: c.change,
+        to: c.to,
+        ...(c.minutes === undefined ? {} : { minutes: c.minutes }),
+      });
+      props.say(t(`methods.${kind}_code_sent`));
     },
     onError: (err) => {
-      props.fail(err, { "invalid-phone": "methods.phone_invalid" });
+      props.fail(err, { [`invalid-${kind}`]: `methods.${kind}_invalid` });
     },
   });
   const confirm = useMutation({
     mutationFn: ({ change, code }: { readonly change: string; readonly code: string }) =>
       json(
-        frontend(`/v1/account/phone/${encodeURIComponent(change)}`, {
+        frontend(`/v1/account/${kind}/${encodeURIComponent(change)}`, {
           method: "POST",
           body: { code },
         }),
       ),
     onSuccess: () => {
-      props.say(t("methods.phone_changed"));
-      location.assign(`${FRONTEND}/login`);
+      setStep("idle");
+      props.say(t(`methods.${kind}_changed`));
+      props.onChanged();
     },
     onError: (err) => {
       props.fail(err, { "code-not-accepted": "methods.proof_failed" });
     },
   });
   return (
-    <Part aria-labelledby="phone-heading" data-testid="phone">
-      <h4 id="phone-heading" className="font-semibold">
-        {t("methods.phone")}
+    <Part aria-labelledby={`${kind}-heading`} data-testid={kind}>
+      <h4 id={`${kind}-heading`} className="font-semibold">
+        {t(`methods.${kind}`)}
       </h4>
-      <Meta>
-        {props.phone.set && props.phone.ends_with !== null
-          ? t("methods.phone_ends", { digits: props.phone.ends_with })
-          : t("methods.phone_none")}
-      </Meta>
+      <Meta>{props.shown ?? t(`methods.${kind}_none`)}</Meta>
       {step === "idle" && (
         <Actions>
           <Button
             variant="outline"
             onClick={() => {
-              setStep("number");
+              setStep("value");
             }}
           >
-            {props.phone.set ? t("action.change_phone") : t("action.add_phone")}
+            {props.shown === null ? t(`action.add_${kind}`) : t(`action.change_${kind}`)}
           </Button>
         </Actions>
       )}
-      {step === "number" && (
+      {step === "value" && (
         <form
           className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            start.mutate(String(new FormData(e.currentTarget).get("phone") ?? ""));
+            start.mutate(String(new FormData(e.currentTarget).get(kind) ?? "").trim());
           }}
         >
           <Field>
-            <FieldLabel htmlFor="new-phone">{t("label.new_phone")}</FieldLabel>
+            <FieldLabel htmlFor={`new-${kind}`}>{t(`label.new_${kind}`)}</FieldLabel>
             <Input
-              id="new-phone"
+              id={`new-${kind}`}
               size="md"
-              name="phone"
-              type="tel"
-              autoComplete="tel"
-              maxLength={32}
+              name={kind}
+              type={kind === "email" ? "email" : "tel"}
+              autoComplete={kind === "email" ? "email" : "tel"}
+              maxLength={kind === "email" ? 320 : 32}
               required
             />
           </Field>
@@ -559,10 +612,16 @@ function Phone(props: {
             confirm.mutate({ change: step.change, code });
           }}
         >
+          <Meta data-testid="sent-to">{t(`methods.${kind}_sent_to`, { to: step.to })}</Meta>
+          {step.minutes !== undefined && (
+            <Meta>{t("methods.code_lifetime", { minutes: String(step.minutes) })}</Meta>
+          )}
           <Field>
-            <FieldLabel htmlFor="phone-code">{t("label.sms_code")}</FieldLabel>
+            <FieldLabel htmlFor={`${kind}-code`}>
+              {t(kind === "email" ? "methods.email_code_label" : "label.phone_code")}
+            </FieldLabel>
             <Input
-              id="phone-code"
+              id={`${kind}-code`}
               size="md"
               name="code"
               inputMode="numeric"
@@ -574,6 +633,20 @@ function Phone(props: {
           <Actions>
             <Button type="submit" disabled={confirm.isPending}>
               {t("action.verify")}
+            </Button>
+            <ResendCode
+              busy={start.isPending}
+              onSend={() => {
+                start.mutate(step.to);
+              }}
+            />
+            <Button
+              variant="outline"
+              onClick={() => {
+                setStep("idle");
+              }}
+            >
+              {t("action.cancel")}
             </Button>
           </Actions>
         </form>
@@ -975,7 +1048,28 @@ export function SignInMethods(): ReactElement {
             say={say}
             fail={fail}
           />
-          {methods.phone !== null && <Phone phone={methods.phone} say={say} fail={fail} />}
+          {methods.email !== null && (
+            <Contact
+              kind="email"
+              shown={methods.email.address}
+              say={say}
+              fail={fail}
+              onChanged={reload}
+            />
+          )}
+          {methods.phone !== null && (
+            <Contact
+              kind="phone"
+              shown={
+                methods.phone.set && methods.phone.ends_with !== null
+                  ? t("methods.phone_ends", { digits: methods.phone.ends_with })
+                  : null
+              }
+              say={say}
+              fail={fail}
+              onChanged={reload}
+            />
+          )}
           {methods.identity !== null && <Identity identity={methods.identity} />}
           <Authenticator
             methods={methods}

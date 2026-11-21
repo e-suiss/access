@@ -147,6 +147,8 @@ pub struct MethodRow {
     pub created_ms: i64,
     /// For a passkey: whether it is synced (backup eligible).
     pub synced: Option<bool>,
+    /// For a passkey: the name the person gave it (TN-180).
+    pub label: Option<String>,
 }
 
 /// Outcome of removing a credential.
@@ -791,7 +793,11 @@ impl TenantTx {
         let rows = sqlx::query!(
             r#"SELECT c.credential_id, c.kind,
                       (extract(epoch FROM c.created_at) * 1000)::bigint AS "created_ms!",
-                      w.backup_eligible AS "backup_eligible?"
+                      w.backup_eligible AS "backup_eligible?",
+                      (SELECT l.label FROM access.identity_passkey_labels l
+                        WHERE l.tenant_id = c.tenant_id AND l.environment_id = c.environment_id
+                          AND l.credential_id = c.credential_id
+                        ORDER BY l.created_ms DESC, l.label_id DESC LIMIT 1) AS "label?"
                  FROM access.identity_credentials c
                  LEFT JOIN access.webauthn_credentials w
                    ON w.tenant_id = c.tenant_id AND w.environment_id = c.environment_id
@@ -812,8 +818,35 @@ impl TenantTx {
                 kind: r.kind,
                 created_ms: r.created_ms,
                 synced: r.backup_eligible,
+                label: r.label,
             })
             .collect())
+    }
+
+    /// TN-180: names the passkey `credential` as the person typed it.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn label_passkey(
+        &mut self,
+        credential: [u8; 16],
+        label: &str,
+        now_ms: u64,
+    ) -> Result<(), StoreError> {
+        let (tenant, environment) = self.scope()?;
+        sqlx::query!(
+            "INSERT INTO access.identity_passkey_labels (tenant_id, environment_id, credential_id,
+                    label, created_ms)
+             VALUES ($1, $2, $3, $4, $5)",
+            tenant,
+            environment,
+            uuid(credential),
+            label,
+            i64::try_from(now_ms).map_err(|_| StoreError::Range)?,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
     }
 
     /// The subject's active credentials of `kind`, oldest first.

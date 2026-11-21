@@ -416,9 +416,8 @@ struct CodeBody {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PasskeyBody {
-    name: String,
     #[serde(default)]
-    display_name: Option<String>,
+    name: String,
 }
 
 #[derive(Deserialize)]
@@ -677,9 +676,11 @@ handler! {
     begin_passkey(s, entry, b, p, bytes, headers) true {
         let _ = &p;
         let req: PasskeyBody = body(&bytes)?;
-        let name = bounded(&req.name, MAX_TEXT)?;
-        let display = bounded(req.display_name.as_deref().unwrap_or(name), MAX_TEXT)?;
-        Ok(s.hosted.begin_passkey(&entry, &b, name, display).await)
+        // TN-180
+        let label = bounded(req.name.trim(), 64)?;
+        Ok(s.hosted
+            .begin_passkey(&entry, &b, (!label.is_empty()).then_some(label))
+            .await)
     }
 }
 

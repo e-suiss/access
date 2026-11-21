@@ -1043,7 +1043,8 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
     /// The code of an e-mail change (OP-153 m.3 (i), TN-64, TN-66): the new address becomes the
     /// account's with `mailbox_owner_since` now, the old one is retired under the environment's reuse
     /// policy, the old address is told "If this wasn't you: Secure your account", and every other
-    /// session ends. `keep_days` is the environment's "keep N days" (N ≥ 365); `None` never frees it.
+    /// session ends; `keep`, the session that confirmed, goes on (TN-179). `keep_days` is the
+    /// environment's "keep N days" (N ≥ 365); `None` never frees it.
     ///
     /// # Errors
     /// [`AccountError`].
@@ -1054,7 +1055,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
     )]
     pub async fn complete_change(
         &self,
-        subject: [u8; 16],
+        (subject, keep): ([u8; 16], Option<[u8; 16]>),
         flow_hash: &[u8; 32],
         device_hash: &[u8; 32],
         code: &str,
@@ -1154,7 +1155,27 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             )
             .await?;
         }
-        // TN-64
+        // TN-64, TN-179
+        if let Some(id) = keep
+            && let Some(s) =
+                tx.0.session_by_id(id)
+                    .await?
+                    .filter(|r| r.subject == subject && r.ended_ms.is_none())
+        {
+            let next = s
+                .subject_epoch
+                .checked_add(1)
+                .ok_or(AccountError::Corrupt)?;
+            tx.0.restamp_session(
+                id,
+                s.subject_epoch,
+                next,
+                s.auth_time_ms,
+                &s.assurance,
+                false,
+            )
+            .await?;
+        }
         if let Some(epoch) = tx.end_sessions(subject).await? {
             events::sessions_ended(&mut tx, self.environment, subject, epoch).await?;
         }

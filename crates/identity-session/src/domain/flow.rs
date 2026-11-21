@@ -136,6 +136,9 @@ pub struct Registration {
     pub expires_at_s: u64,
     /// The PRF salt offered.
     pub prf_salt: Option<[u8; 32]>,
+    /// TN-180: the name the person gave the passkey.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// A suspended step (TN-102): what was declared when suspending, the only thing resuming may
