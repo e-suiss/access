@@ -6321,6 +6321,76 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "page-way_passkey"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-way_passkey_hint"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-way_push"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-way_push_hint"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-way_totp"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-way_totp_hint"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-way_sms"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-way_sms_hint"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-way_recovery_code"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-way_recovery_code_hint"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "page-other_ways_title"
 surface = "login"
 class = "label"

@@ -26,7 +26,6 @@ import type {
   RecoveryCodesNode,
   Submission,
   SubmitNode,
-  Text,
   TotpSetupNode,
   UiNode,
 } from "./contract.js";
@@ -99,17 +98,31 @@ function waysOf(nodes: readonly UiNode[]): Way[] {
   );
 }
 
-/** TN-162: the label a way is offered under in "Try another way". */
-function wayLabel(way: Way, nodes: readonly UiNode[]): string {
-  let label: Text | undefined;
-  for (const x of nodes) {
-    if (way === "passkey" && x.type === "passkey_get") label = x.label;
-    else if (way === "totp" && x.type === "input" && x.method === "totp") label = x.label;
-    else if (x.type === "submit" && x.method === (way === "sms" ? "send_sms" : WAY_METHODS[way][0]))
-      label = x.label;
-    if (label !== undefined) break;
-  }
-  return label === undefined ? way : text(label);
+/** TN-176: a way offered under "Try another way", named and described for choosing it. */
+function WayChoice(props: {
+  readonly way: Way;
+  readonly busy: boolean;
+  readonly onPick: (way: Way) => void;
+}) {
+  const id = `way-${props.way}`;
+  return (
+    <button
+      type="button"
+      className="flex min-h-14 w-full flex-col items-start gap-0.5 rounded-xl border border-border bg-card px-4 py-3 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+      disabled={props.busy}
+      onClick={() => props.onPick(props.way)}
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-hint`}
+      data-way={props.way}
+    >
+      <span id={`${id}-title`} className="font-medium">
+        {t(`page.way_${props.way}`)}
+      </span>
+      <span id={`${id}-hint`} className={note}>
+        {t(`page.way_${props.way}_hint`)}
+      </span>
+    </button>
+  );
 }
 
 function methodsInOrder(nodes: readonly UiNode[]): Method[] {
@@ -795,8 +808,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
     return method !== "sms" || smsSent.has(ui.flow);
   };
   // TN-174: read with the step's messages, so a new answer on the same flow reads the set again
-  const sentSms =
-    second && (ui.messages.some((m) => m.id === "sms.sent") || smsSent.has(ui.flow));
+  const sentSms = second && (ui.messages.some((m) => m.id === "sms.sent") || smsSent.has(ui.flow));
   const submit = (s: Submission) => {
     if (s.method === "send_sms") smsSent.add(ui.flow);
     onSubmit(s);
@@ -904,9 +916,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           {ways
             .filter((w) => w !== way)
             .map((w) => (
-              <Button key={w} {...other} disabled={busy} onClick={() => pick(w)} data-way={w}>
-                {wayLabel(w, ui.nodes)}
-              </Button>
+              <WayChoice key={w} way={w} busy={busy} onPick={pick} />
             ))}
         </nav>
       )}

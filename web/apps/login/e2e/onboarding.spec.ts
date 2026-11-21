@@ -507,7 +507,11 @@ test("the second step shows one way at a time and the code field only after the 
   await expect(page.getByLabel("Recovery code")).toHaveCount(0);
   await expect(page.getByLabel("Code from the text message")).toHaveCount(0);
   await page.getByRole("button", { name: "Try another way" }).click();
-  await page.locator("[data-way=sms]").click();
+  // TN-176
+  const choice = page.getByRole("button", { name: "Text message", exact: true });
+  await expect(choice).toHaveAccessibleDescription("We'll text a code to your phone.");
+  await expect(page.getByRole("button", { name: "Recovery code", exact: true })).toBeVisible();
+  await choice.click();
   await expect(page.getByLabel("Code from your authenticator app")).toHaveCount(0);
   await expect(page.getByLabel("Code from the text message")).toHaveCount(0);
   await page.getByRole("button", { name: "Text me a code" }).click();
